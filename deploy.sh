@@ -431,6 +431,8 @@ def client(n, local_port=1080, server=None):
     elif n['protocol'] == 'ss2022':
         out = {'type': 'shadowsocks', 'tag': 'upstream', 'server': addr, 'server_port': n['port'],
                'method': n['method'], 'password': n['password']}
+        if n.get('ss_uot'):
+            out['udp_over_tcp'] = {'enabled': True, 'version': 2}
     elif n['protocol'] == 'snell5':
         # sing-box's v4 client interoperates with the v5 TCP server.
         out = {'type': 'snell', 'tag': 'upstream', 'server': addr, 'server_port': n['port'],
@@ -448,7 +450,10 @@ def share(n):
     address = f"{authority(n['host'])}:{n['port']}"
     fragment = urllib.parse.quote(n['name'])
     if n['protocol'] == 'ss2022':
-        return f"ss://{b64(n['method'] + ':' + n['password'])}@{address}#{fragment}"
+        uri = f"ss://{b64(n['method'] + ':' + n['password'])}@{address}#{fragment}"
+        if n.get('ss_uot'):
+            uri += '\n# UDP 使用 UoT v2：请用 client-sing-box.json，或在客户端手动开启 UDP over TCP v2；上面的 SS URI 不含 UoT 设置。'
+        return uri
     if n['protocol'] == 'snell5':
         return f"{n['name']} = snell, {n['host']}, {n['port']}, psk={n['password']}, version=5, reuse=true\n# Surge 建议 block-quic=all；本实现不支持 Snell v5 专用 QUIC Proxy"
     if n['protocol'] == 'vlessenc':
@@ -608,6 +613,9 @@ def relay_add(a):
     n = dict(name=valid_name(a.name), role='relay', protocol=a.protocol, host=host(a.host),
              port=port(a.port), listen=a.listen, egress=a.egress, upstream=parse_upstream(a.upstream),
              bridge_port=a.bridge_port or free_port())
+    if a.ss_uot and a.protocol != 'ss2022':
+        raise ValueError('--ss-uot 仅用于 SS2022')
+    n['ss_uot'] = a.ss_uot
     if n['bridge_port'] == n['port']:
         raise ValueError('公网端口与本地桥接端口不能相同')
     if a.protocol == 'vlessenc':
@@ -628,6 +636,10 @@ def relay_set(a):
         n['egress'] = None if a.egress == 'default' else a.egress
     if a.upstream:
         n['upstream'] = parse_upstream(a.upstream)
+    if a.ss_uot is not None:
+        if n['protocol'] != 'ss2022':
+            raise ValueError('--ss-uot 仅用于 SS2022')
+        n['ss_uot'] = a.ss_uot == 'on'
     apply_node(n)
 
 def remove(name):
@@ -813,6 +825,8 @@ def menu():
         egress = ask('线路名称（留空使用系统默认）')
         if egress:
             argv += ['--egress', egress]
+        if argv[4] == 'ss2022' and ask('SS2022 使用 UDP over TCP v2？y/n', 'n').lower() == 'y':
+            argv += ['--ss-uot']
     elif pick == '4':
         argv = ['relay-set', '--name', ask('中转名称')]
         egress = ask('新线路名称，default 为系统默认（留空保留）')
@@ -866,10 +880,12 @@ def parser():
     q.add_argument('--upstream', required=True)
     q.add_argument('--egress')
     q.add_argument('--bridge-port', type=port)
+    q.add_argument('--ss-uot', action='store_true', help='导出和测试 SS2022 客户端时启用 UDP over TCP v2')
     q = sub.add_parser('relay-set')
     q.add_argument('--name', required=True)
     q.add_argument('--upstream')
     q.add_argument('--egress')
+    q.add_argument('--ss-uot', choices=['on', 'off'])
     q = sub.add_parser('probe')
     q.add_argument('--target', required=True)
     q.add_argument('--port', type=port, default=18443)

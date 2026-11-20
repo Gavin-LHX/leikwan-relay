@@ -45,6 +45,15 @@ class ManagerTests(unittest.TestCase):
     def test_ipv6_sharing_uses_brackets(self):
         self.assertIn('@[2001:db8::10]:21001', m.share(self.node))
 
+    def test_ss_uot_export_is_explicit_and_keeps_standard_uri(self):
+        n = dict(self.node, ss_uot=True)
+        _, cfg = m.client(n)
+        self.assertEqual(cfg['outbounds'][0]['udp_over_tcp'], {'enabled': True, 'version': 2})
+        self.assertTrue(m.share(n).startswith('ss://'))
+        self.assertIn('UoT', m.share(n).splitlines()[1])
+        _, native = m.client(self.node)
+        self.assertNotIn('udp_over_tcp', native['outbounds'][0])
+
     def test_invalid_names_cannot_escape_state_directory(self):
         for name in ('../other', 'demo/other', 'x\nExecStart=/bin/sh', '-a', 'a' * 33):
             with self.subTest(name=name), self.assertRaises(ValueError):
@@ -104,10 +113,12 @@ class CoreSchemaTests(unittest.TestCase):
         try:
             private, public = m.keypair()
             self.profile['public_key'] = public
-            for protocol in ('ss2022', 'snell5', 'vlessenc'):
+            for protocol in ('ss2022', 'ss2022-uot', 'snell5', 'vlessenc'):
                 n = dict(self.node, protocol=protocol, uuid=str(uuid.uuid4()),
                     decryption='mlkem768x25519plus.native.600s.' + private,
                     encryption='mlkem768x25519plus.native.1rtt.' + public)
+                if protocol == 'ss2022-uot':
+                    n.update(protocol='ss2022', ss_uot=True)
                 with tempfile.TemporaryDirectory() as tmp:
                     sb, xr = m.render(n, tmp, {'cn2': self.route})
                     # A CI runner does not have our synthetic eth1.

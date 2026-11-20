@@ -146,6 +146,15 @@ lkr test --name us-ss --server 127.0.0.1
 
 SS2022、Snell 由 sing-box 处理；VLESS Encryption 使用独立 Xray 入站，经 `127.0.0.1` SOCKS 桥接至 sing-box 的所选上游。所有中转数据只配置所选上游，不配置故障直连回退。每个入口有一个仅监听本机的 SOCKS 桥接端口，自动分配，也可用 `--bridge-port` 明确指定。
 
+如果外网到入口的原生 UDP 不通，SS2022 可以使用 **UoT v2**，经 TCP 承载 UDP。添加入口时加 `--ss-uot`，已有入口执行：
+
+```bash
+lkr relay-set --name us-ss --ss-uot on
+lkr test --name us-ss --udp
+```
+
+然后使用重新导出的 `client-sing-box.json`，或在支持 UoT 的客户端中手动开启 UDP over TCP v2。标准 `ss://` URI 不携带这个扩展设置；仅复制 URI 仍然会使用原生 UDP。可以用 `--ss-uot off` 恢复原生 UDP。UoT 是 SagerNet 扩展，需要客户端支持；普通 TCP 流量不受影响。
+
 ## 5. 切换和维护
 
 ```bash
