@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+private/
+*.pem
+node.json
+share.txt
+client-*.json
+*.tar.gz
+*.zip

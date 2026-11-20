@@ -1,0 +1,19 @@
+name: checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild and verify self-contained entry point
+        run: |
+          python3 tools/build.py
+          git diff --exit-code -- deploy.sh
+          bash -n deploy.sh
+          python3 -m py_compile src/manager.py
+      - name: Install checksum-pinned cores
+        run: sudo bash deploy.sh install
+      - name: Validate routing, sharing and actual core schemas
+        run: sudo env LKR_CORE_DIR=/opt/leikwan-relay/bin python3 -m unittest discover -s tests -v
